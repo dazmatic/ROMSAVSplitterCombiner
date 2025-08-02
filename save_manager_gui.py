@@ -19,8 +19,23 @@ class SaveFileManager(tk.Tk):
 
         # Split File Section
         tk.Label(frame, text="Split a 128kb Save File", font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
+        
+        split_frame = tk.Frame(frame)
+        split_frame.pack()
+
+        self.name_entries = []
+        default_names = [f"save{i+1}.sav" for i in range(4)]
+        for i in range(4):
+            entry_frame = tk.Frame(split_frame)
+            entry_frame.pack(fill=tk.X, pady=2)
+            tk.Label(entry_frame, text=f"File {i+1} Name:", width=15, anchor='w').pack(side=tk.LEFT)
+            entry = tk.Entry(entry_frame)
+            entry.insert(0, default_names[i])
+            entry.pack(side=tk.LEFT, expand=True, fill=tk.X)
+            self.name_entries.append(entry)
+
         split_button = tk.Button(frame, text="Select File to Split", command=self.split_file, width=30)
-        split_button.pack(pady=5)
+        split_button.pack(pady=10)
 
         tk.Label(frame, text="-"*40).pack(pady=10)
 
@@ -45,7 +60,7 @@ class SaveFileManager(tk.Tk):
         combine_button.pack(pady=10)
 
     def split_file(self):
-        """Splits a 128kb file into four 32kb files."""
+        """Splits a 128kb file into four 32kb files using user-defined names."""
         filepath = filedialog.askopenfilename(
             title="Select 128kb file to split",
             filetypes=[("Save Files", "*.sav"), ("All Files", "*.*")]
@@ -54,17 +69,24 @@ class SaveFileManager(tk.Tk):
             return
 
         try:
+            output_dir = os.path.dirname(filepath)
+            output_names = [entry.get() for entry in self.name_entries]
+            
             with open(filepath, "rb") as f_in:
-                output_dir = os.path.dirname(filepath)
                 for i in range(4):
                     data = f_in.read(CHUNK_SIZE_BYTES)
                     if not data:
                         break
-                    part_filename = f"save{i+1}.sav"
-                    part_filepath = os.path.join(output_dir, part_filename)
+                    
+                    filename = output_names[i]
+                    if not filename:
+                        filename = f"save{i+1}.sav"
+                    
+                    part_filepath = os.path.join(output_dir, filename)
                     with open(part_filepath, "wb") as f_out:
                         f_out.write(data)
-                messagebox.showinfo("Success", "File split successfully into save1.sav, save2.sav, save3.sav, and save4.sav.")
+
+            messagebox.showinfo("Success", "File split successfully using the names provided.")
         except Exception as e:
             messagebox.showerror("Error", f"An error occurred: {e}")
 
@@ -108,10 +130,10 @@ class SaveFileManager(tk.Tk):
         self.listbox.delete(0, tk.END)
         for i, path in enumerate(self.file_paths):
             self.listbox.insert(tk.END, f"{i+1}: {os.path.basename(path)}")
-        self.listbox.select_set(0) # Select the first item by default
+        self.listbox.select_set(0)
 
     def combine_files(self):
-        """Combines the four files in the specified order."""
+        """Combines the four files, padding smaller files to 32kb."""
         if len(self.file_paths) != 4:
             messagebox.showerror("Error", "Please select exactly four files before combining.")
             return
@@ -125,11 +147,26 @@ class SaveFileManager(tk.Tk):
             return
 
         try:
+            padded_files_count = 0
             with open(output_filepath, "wb") as f_out:
                 for filepath in self.file_paths:
+                    file_size = os.path.getsize(filepath)
                     with open(filepath, "rb") as f_in:
-                        f_out.write(f_in.read())
-            messagebox.showinfo("Success", f"Files combined successfully into {os.path.basename(output_filepath)}")
+                        data = f_in.read()
+
+                    if file_size < CHUNK_SIZE_BYTES:
+                        padding_needed = CHUNK_SIZE_BYTES - file_size
+                        data += b'\x00' * padding_needed
+                        padded_files_count += 1
+                        print(f"Padded {os.path.basename(filepath)} with {padding_needed} bytes.")
+                        
+                    f_out.write(data)
+            
+            success_message = f"Files combined successfully into {os.path.basename(output_filepath)}"
+            if padded_files_count > 0:
+                success_message += f"\n{padded_files_count} file(s) were padded to 32kb."
+            
+            messagebox.showinfo("Success", success_message)
         except Exception as e:
             messagebox.showerror("Error", f"An error occurred: {e}")
 

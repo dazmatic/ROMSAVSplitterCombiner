@@ -243,23 +243,23 @@ class MultiFunctionTool(tk.Tk):
             device = self.rom_combiner_device_mode.get()
             menu_filename = MENU_FILES.get((device, rom_count))
             
-            if getattr(sys, 'frozen', False):
-                # Running as a PyInstaller executable
-                base_path = sys._MEIPASS
-                menu_filepath = os.path.join(base_path, 'menus', menu_filename)
-            else:
-                # Running as a script
-                base_path = os.path.dirname(os.path.abspath(__file__))
-                menu_filepath = os.path.join(base_path, 'menus', menu_filename)
+            # Use the directory where the script is running
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            menu_filepath = os.path.join(script_dir, 'menus', menu_filename)
+
+            if not os.path.exists(menu_filepath):
+                messagebox.showerror(
+                    "Error", 
+                    f"Could not find the automatic menu file: {menu_filename}.\n\n"
+                    "Please create a folder named 'menus' in the same directory as this script "
+                    "and place the file inside. Alternatively, select a custom menu file."
+                )
+                return
         else: # Custom menu mode
             if not self.rom_combiner_menu_file_path:
                 messagebox.showerror("Error", "Please select a custom menu file.")
                 return
             menu_filepath = self.rom_combiner_menu_file_path
-
-        if not os.path.exists(menu_filepath):
-            messagebox.showerror("Error", f"Could not find menu file: {os.path.basename(menu_filepath)}. Please check your menu selection or ensure the file is in the 'menus' folder.")
-            return
 
         current_slots = GAME_SLOTS_4 if self.rom_combiner_rom_mode.get() == "4" else GAME_SLOTS_3
         
@@ -270,11 +270,15 @@ class MultiFunctionTool(tk.Tk):
         # Check if any game file is too large for its slot
         for i, game_filepath in enumerate(self.rom_combiner_game_file_paths):
             slot = current_slots[i]
-            file_size = os.path.getsize(game_filepath)
-            
-            if file_size > slot["max_size"]:
-                messagebox.showerror("Error", f"{os.path.basename(game_filepath)} ({file_size/1024/1024:.2f}MB) is larger than the {slot['max_size']/1024/1024}MB limit for {slot['name']}. No file will be created.")
+            try:
+                file_size = os.path.getsize(game_filepath)
+                if file_size > slot["max_size"]:
+                    messagebox.showerror("Error", f"{os.path.basename(game_filepath)} ({file_size/1024/1024:.2f}MB) is larger than the {slot['max_size']/1024/1024}MB limit for {slot['name']}. No file will be created.")
+                    return
+            except OSError:
+                messagebox.showerror("Error", f"Could not access game file: {os.path.basename(game_filepath)}. Please ensure the file exists and is accessible.")
                 return
+
 
         output_filepath = filedialog.asksaveasfilename(
             defaultextension=".gbc",
@@ -350,6 +354,7 @@ class MultiFunctionTool(tk.Tk):
 
         combine_mode_frame = tk.Frame(frame)
         combine_mode_frame.pack()
+        self.savesplit_mode = tk.StringVar(value="4")
         tk.Radiobutton(combine_mode_frame, text="4-Save Combine", variable=self.savesplit_mode, value="4", command=self.savesplit_update_ui).pack(side=tk.LEFT, padx=10)
         tk.Radiobutton(combine_mode_frame, text="3-Save Combine", variable=self.savesplit_mode, value="3", command=self.savesplit_update_ui).pack(side=tk.LEFT, padx=10)
         
@@ -521,12 +526,5 @@ class MultiFunctionTool(tk.Tk):
             messagebox.showerror("Error", f"An error occurred: {e}")
 
 if __name__ == "__main__":
-    # Create the 'menus' directory if it doesn't exist
-    if not os.path.exists('menus'):
-        try:
-            os.makedirs('menus')
-        except OSError as e:
-            print(f"Error creating directory 'menus': {e}")
-    
     app = MultiFunctionTool()
     app.mainloop()

@@ -50,6 +50,7 @@ class MultiFunctionTool(tk.Tk):
         # --- Save Splitter/Combiner Variables ---
         self.savesplit_file_paths = []
         self.savesplit_name_entries = []
+        self.savesplit_mode = tk.StringVar(value="4") # "4" or "3"
 
         self.setup_ui()
 
@@ -317,8 +318,14 @@ class MultiFunctionTool(tk.Tk):
         frame.pack()
 
         # Split File Section
-        tk.Label(frame, text="Split a 128kb Save File", font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
+        tk.Label(frame, text="Split a Save File", font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
         
+        split_mode_frame = tk.Frame(frame)
+        split_mode_frame.pack()
+        self.savesplit_split_mode = tk.StringVar(value="4")
+        tk.Radiobutton(split_mode_frame, text="4-Game Split", variable=self.savesplit_split_mode, value="4", command=self.update_split_ui).pack(side=tk.LEFT, padx=10)
+        tk.Radiobutton(split_mode_frame, text="3-Game Split", variable=self.savesplit_split_mode, value="3", command=self.update_split_ui).pack(side=tk.LEFT, padx=10)
+
         split_frame = tk.Frame(frame)
         split_frame.pack()
 
@@ -337,11 +344,17 @@ class MultiFunctionTool(tk.Tk):
         split_button.pack(pady=10)
 
         tk.Label(frame, text="-"*40).pack(pady=10)
-
+        
         # Combine Files Section
-        tk.Label(frame, text="Combine four 32kb Save Files", font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
-        select_combine_button = tk.Button(frame, text="Select 4 Files to Combine", command=self.select_files_to_combine, width=30)
-        select_combine_button.pack(pady=5)
+        tk.Label(frame, text="Combine Save Files", font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
+
+        combine_mode_frame = tk.Frame(frame)
+        combine_mode_frame.pack()
+        tk.Radiobutton(combine_mode_frame, text="4-Save Combine", variable=self.savesplit_mode, value="4", command=self.savesplit_update_ui).pack(side=tk.LEFT, padx=10)
+        tk.Radiobutton(combine_mode_frame, text="3-Save Combine", variable=self.savesplit_mode, value="3", command=self.savesplit_update_ui).pack(side=tk.LEFT, padx=10)
+        
+        self.select_combine_button = tk.Button(frame, text="Select 4 Files to Combine", command=self.select_files_to_combine, width=30)
+        self.select_combine_button.pack(pady=5)
 
         self.savesplit_listbox = tk.Listbox(frame, selectmode=tk.SINGLE, width=50, height=4)
         self.savesplit_listbox.pack(pady=5)
@@ -356,9 +369,30 @@ class MultiFunctionTool(tk.Tk):
 
         combine_button = tk.Button(frame, text="Combine Files", command=self.combine_files, width=30)
         combine_button.pack(pady=10)
+        
+        self.savesplit_update_ui()
+        self.update_split_ui()
 
+    def update_split_ui(self):
+        # Disable/enable entry fields for 3-game split
+        for i in range(4):
+            state = "normal"
+            if self.savesplit_split_mode.get() == "3" and i == 0:
+                state = "disabled"
+            self.savesplit_name_entries[i].config(state=state)
+            
+    def savesplit_update_ui(self):
+        """Updates the Save Splitter/Combiner UI based on radio button selections."""
+        max_files = 4 if self.savesplit_mode.get() == "4" else 3
+        self.select_combine_button.config(text=f"Select {max_files} Files to Combine")
+        
+        # Clear the listbox if the mode changes and file count doesn't match
+        if len(self.savesplit_file_paths) != max_files:
+            self.savesplit_file_paths = []
+            self.savesplit_update_listbox()
+        
     def split_file(self):
-        """Splits a 128kb file into four 32kb files using user-defined names."""
+        """Splits a save file into individual save files based on selected mode."""
         filepath = filedialog.askopenfilename(
             title="Select 128kb file to split",
             filetypes=[("Save Files", "*.sav"), ("All Files", "*.*")]
@@ -366,36 +400,51 @@ class MultiFunctionTool(tk.Tk):
         if not filepath:
             return
 
+        file_size = os.path.getsize(filepath)
+        if file_size != 4 * CHUNK_SIZE_BYTES:
+            messagebox.showerror("Error", "The selected file is not a 128kb file. Cannot split.")
+            return
+
         try:
             output_dir = os.path.dirname(filepath)
             output_names = [entry.get() for entry in self.savesplit_name_entries]
             
+            start_index = 0
+            file_count = 4
+            if self.savesplit_split_mode.get() == "3":
+                start_index = 1
+                file_count = 3
+            
             with open(filepath, "rb") as f_in:
-                for i in range(4):
-                    data = f_in.read(CHUNK_SIZE_BYTES)
-                    if not data:
-                        break
-                    
-                    filename = output_names[i]
-                    if not filename:
-                        filename = f"save{i+1}.sav"
-                    
-                    part_filepath = os.path.join(output_dir, filename)
-                    with open(part_filepath, "wb") as f_out:
-                        f_out.write(data)
+                save_data = f_in.read()
+            
+            for i in range(file_count):
+                data_index = i + start_index
+                start_byte = data_index * CHUNK_SIZE_BYTES
+                end_byte = start_byte + CHUNK_SIZE_BYTES
+                data = save_data[start_byte:end_byte]
+                
+                filename = output_names[data_index]
+                if not filename:
+                    filename = f"save{data_index+1}.sav"
+                
+                part_filepath = os.path.join(output_dir, filename)
+                with open(part_filepath, "wb") as f_out:
+                    f_out.write(data)
 
-            messagebox.showinfo("Success", "File split successfully using the names provided.")
+            messagebox.showinfo("Success", f"File split successfully into {file_count} files using the names provided.")
         except Exception as e:
             messagebox.showerror("Error", f"An error occurred: {e}")
 
     def select_files_to_combine(self):
-        """Opens a file dialog to select four 32kb files and updates the listbox."""
+        """Opens a file dialog to select files for combining and updates the listbox."""
+        max_files = 4 if self.savesplit_mode.get() == "4" else 3
         file_paths = filedialog.askopenfilenames(
-            title="Select the four 32kb save files",
+            title=f"Select the {max_files} save files to combine",
             filetypes=[("Save Files", "*.sav"), ("All Files", "*.*")]
         )
-        if len(file_paths) != 4:
-            messagebox.showerror("Error", "You must select exactly four files to combine.")
+        if len(file_paths) != max_files:
+            messagebox.showerror("Error", f"You must select exactly {max_files} files to combine.")
             return
 
         self.savesplit_file_paths = list(file_paths)
@@ -430,9 +479,10 @@ class MultiFunctionTool(tk.Tk):
             self.savesplit_listbox.select_set(0)
 
     def combine_files(self):
-        """Combines the four files, padding smaller files to 32kb."""
-        if len(self.savesplit_file_paths) != 4:
-            messagebox.showerror("Error", "Please select exactly four files before combining.")
+        """Combines the files based on the selected mode, padding smaller files to 32kb."""
+        max_files = 4 if self.savesplit_mode.get() == "4" else 3
+        if len(self.savesplit_file_paths) != max_files:
+            messagebox.showerror("Error", f"Please select exactly {max_files} files before combining.")
             return
 
         output_filepath = filedialog.asksaveasfilename(
@@ -446,6 +496,10 @@ class MultiFunctionTool(tk.Tk):
         try:
             padded_files_count = 0
             with open(output_filepath, "wb") as f_out:
+                # Add padding for 3-file mode
+                if self.savesplit_mode.get() == "3":
+                    f_out.write(b'\x00' * CHUNK_SIZE_BYTES)
+
                 for filepath in self.savesplit_file_paths:
                     file_size = os.path.getsize(filepath)
                     with open(filepath, "rb") as f_in:

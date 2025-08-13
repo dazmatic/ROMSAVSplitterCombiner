@@ -1,2 +1,4 @@
-# GBSaveSplitterCombiner
-Small python executable that allows a ChisFlash 4in1 SRAM 128kb save file to be split into 4 separate 32kb files or combine 4 save files into a single 128kb file for flashing 
+# ROMSAVSplitterCombiner
+A small 'vibe coded' python executable that allows for the combining and or splitting of 4 or 3 rom files and their subsequent saves for use on a ChisFlash EPM240 CPLD based flashcart with 8mb rom and 128kb SRAM
+
+@ChisBread
